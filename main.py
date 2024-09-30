@@ -9,20 +9,16 @@ from tensorflow.keras.callbacks import EarlyStopping
 import keras_tuner as kt
 import matplotlib.pyplot as plt
 
-# Load data
 spy_data = pd.read_csv("spy_max.csv")
 spy_data = spy_data.iloc[::-1].reset_index(drop=True)
 spy_data = spy_data.drop(columns=['Date'])
 
-# Scale features
 scaler = MinMaxScaler()
 scaled_features = scaler.fit_transform(spy_data.drop(columns=['Close/Last']))
 
-# Scale labels
 label_scaler = MinMaxScaler()
 scaled_labels = label_scaler.fit_transform(spy_data[['Close/Last']]).flatten()
 
-# Function to create sequences
 def create_sequence(data, labels, seq_length, output_length):
     X = []
     y = []
@@ -32,15 +28,12 @@ def create_sequence(data, labels, seq_length, output_length):
     return np.array(X), np.array(y)
 
 seq_len = 10
-output_len = 1  # Predicting one time step ahead
+output_len = 1  
 
-# Create sequences
 X, y = create_sequence(scaled_features, scaled_labels, seq_len, output_len)
 
-# Reshape data for LSTM
 X = np.reshape(X, (X.shape[0], X.shape[1], X.shape[2]))
 
-# Define the model building function for Keras Tuner
 def build_model(hp):
     model = Sequential()
     model.add(LSTM(units=hp.Int('units', min_value=32, max_value=128, step=32),
@@ -59,11 +52,9 @@ tuner = kt.Hyperband(
     project_name='lstm_hyperparameter_tuning'
 )
 
-# Perform K-fold cross-validation
 n_splits = 5
 kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-# Initialize lists to store RMSE values
 rmse_values = []
 
 for fold_index, (train_index, val_index) in enumerate(kf.split(X)):
@@ -72,38 +63,29 @@ for fold_index, (train_index, val_index) in enumerate(kf.split(X)):
     X_train, X_val = X[train_index], X[val_index]
     y_train, y_val = y[train_index], y[val_index]
 
-    # Early stopping callback
     early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 
-    # Perform hyperparameter search
     tuner.search(X_train, y_train, epochs=50, validation_data=(X_val, y_val), callbacks=[early_stopping])
 
-    # Get the best model and evaluate on validation set
     best_model = tuner.get_best_models(num_models=1)[0]
 
-    # Evaluate the best model on validation data
     val_loss = best_model.evaluate(X_val, y_val)
     print(f"Fold {fold_index + 1}/{n_splits} - Validation Loss: {val_loss}")
 
-    # Make predictions on test set if final fold
     if fold_index == n_splits - 1:
-        # Split data into train and test sets for final evaluation
         X_train_final, X_test, y_train_final, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Reshape data for LSTM
         X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], X_test.shape[2]))
 
         # Train the best model on the full training set
         history = best_model.fit(X_train, y_train, batch_size=32, epochs=50, validation_split=0.2)
 
-        # Make predictions
         predictions = best_model.predict(X_test)
 
         # Inverse transform the predictions and actual values
         predictions = label_scaler.inverse_transform(predictions)
         y_test_actual = label_scaler.inverse_transform(y_test)
 
-        # Calculate RMSE
         rmse = np.sqrt(np.mean((predictions - y_test_actual) ** 2))
         rmse_values.append(rmse)
 
