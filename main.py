@@ -82,7 +82,6 @@ for fold_index, (train_index, val_index) in enumerate(kf.split(X)):
 
         predictions = best_model.predict(X_test)
 
-        # Inverse transform the predictions and actual values
         predictions = label_scaler.inverse_transform(predictions)
         y_test_actual = label_scaler.inverse_transform(y_test)
 
